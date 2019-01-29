@@ -14,19 +14,26 @@ class CoreDataImporter {
         self.context = context
     }
     
-    func sync(entries: [EntryRepresentation], completion: @escaping (Error?) -> Void = { _ in }) {
+    func sync(entryRepresentations: [EntryRepresentation], completion: @escaping (Error?) -> Void = { _ in }) {
         
         self.context.perform {
-            for entryRep in entries {
-                guard let identifier = entryRep.identifier else { continue }
-                
-                let entry = self.fetchSingleEntryFromPersistentStore(with: identifier, in: self.context)
-                if let entry = entry, entry != entryRep {
-                    self.update(entry: entry, with: entryRep)
-                } else if entry == nil {
-                    _ = Entry(entryRepresentation: entryRep, context: self.context)
+            print(Date().description)
+            let coreDataEntries = self.fetchEntriesFromPersistentStore(in: self.context)
+            for entryRepresentation in entryRepresentations {
+                guard let identifier = entryRepresentation.identifier else { continue }
+                if let matchingCoreDataEntry = coreDataEntries?.filter({ $0.identifier == identifier }), let unwrappedCoreDataEntry = matchingCoreDataEntry.first {
+                    self.update(entry: unwrappedCoreDataEntry, with: entryRepresentation)
+                } else if coreDataEntries?.filter({ $0.identifier == identifier }) == nil {
+                    _ = Entry(entryRepresentation: entryRepresentation, context: self.context)
                 }
+                
+//                if let entry = entry(), entry != entryRep {
+//                    self.update(entry: entry, with: entryRep)
+//                } else if entry == nil {
+//                    _ = Entry(entryRepresentation: entryRep, context: self.context)
+//                }
             }
+            print(Date().description)
             completion(nil)
         }
     }
@@ -39,18 +46,17 @@ class CoreDataImporter {
         entry.identifier = entryRep.identifier
     }
     
-    private func fetchSingleEntryFromPersistentStore(with identifier: String?, in context: NSManagedObjectContext) -> Entry? {
-        
-        guard let identifier = identifier else { return nil }
+    private func fetchEntriesFromPersistentStore(in context: NSManagedObjectContext) -> [Entry]? {
         
         let fetchRequest: NSFetchRequest<Entry> = Entry.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "identifier == %@", identifier)
         
-        var result: Entry? = nil
+        var result: [Entry]? = nil
+        context.performAndWait {
         do {
-            result = try context.fetch(fetchRequest).first
+            result = try context.fetch(fetchRequest)
         } catch {
             NSLog("Error fetching single entry: \(error)")
+        }
         }
         return result
     }
